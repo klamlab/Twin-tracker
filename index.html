@@ -3,17 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ben & Leon Tracker</title>
+    <title>Ben & Leon Tracker ULTIMATE</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 font-sans text-gray-800 antialiased">
+<body class="bg-gray-100 font-sans text-gray-900 antialiased">
     <div id="app-container" class="max-w-md mx-auto bg-white min-h-screen shadow-lg pb-10">
-        <header class="pt-12 pb-4 px-6 bg-white sticky top-0 z-10 border-b border-gray-100">
-            <h1 class="text-2xl font-bold">👶 Ben & Leon</h1>
-            <p id="sync-status" class="text-xs text-orange-500 mt-1 font-semibold">Verbinde...</p>
+        <header class="pt-12 pb-4 px-6 bg-white sticky top-0 z-20 border-b border-gray-100 flex justify-between items-end">
+            <div>
+                <h1 class="text-2xl font-bold">👶 Ben & Leon</h1>
+                <p id="sync-status" class="text-xs text-orange-500 font-semibold">Verbinde...</p>
+            </div>
+            <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase">Archiv</button>
         </header>
-        <main class="p-4 space-y-6" id="main-content"></main>
+
+        <main class="p-4 space-y-4" id="main-content"></main>
+        
+        <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto">
+            <div class="max-w-md mx-auto">
+                <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2">
+                    <h2 class="text-2xl font-bold">Komplette Historie</h2>
+                    <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold">Schließen</button>
+                </div>
+                <div id="history-content" class="space-y-8 pb-20"></div>
+            </div>
+        </div>
     </div>
 
     <script type="module">
@@ -42,31 +56,20 @@
             if (docSnap.exists()) {
                 data = docSnap.data();
                 document.getElementById('sync-status').innerText = '✅ Live synchronisiert';
-                document.getElementById('sync-status').className = 'text-xs text-green-500 mt-1 font-semibold';
+                document.getElementById('sync-status').className = 'text-xs text-green-500 font-semibold';
                 render();
             } else { saveData(); }
-        }, (error) => {
-            document.getElementById('sync-status').innerText = '❌ Zugriff verweigert';
         });
 
-        // Zentrale Speicherfunktion
-        function saveData() { setDoc(docRef, data).catch(e => console.log(e)); }
+        function saveData() { 
+            // KEINE LÖSCHUNG MEHR: Alles bleibt dauerhaft in der Liste
+            setDoc(docRef, data).catch(e => alert("Speicherfehler: " + e)); 
+        }
 
-        // NEU: Funktion zum Nachtragen / Bearbeiten der Zeit
-        window.editTime = function(babyId, eventIndex) {
-            const event = data[babyId].events[eventIndex];
-            const oldDate = new Date(event.time);
-            const inputTime = prompt("Uhrzeit anpassen (HH:MM):", oldDate.getHours().toString().padStart(2, '0') + ":" + oldDate.getMinutes().toString().padStart(2, '0'));
-            
-            if (inputTime) {
-                const [hours, minutes] = inputTime.split(':');
-                const newDate = new Date(event.time);
-                newDate.setHours(parseInt(hours), parseInt(minutes));
-                event.time = newDate.getTime();
-                // Liste neu sortieren, falls Zeiten verschoben wurden
-                data[babyId].events.sort((a, b) => b.time - a.time);
-                saveData();
-            }
+        window.toggleHistory = function() {
+            const modal = document.getElementById('history-modal');
+            modal.classList.toggle('hidden');
+            if(!modal.classList.contains('hidden')) renderHistory();
         };
 
         window.addFeed = function(id) {
@@ -79,57 +82,93 @@
             b.isSleeping = !b.isSleeping;
             const now = Date.now();
             b.sleepStart = b.isSleeping ? now : null;
-            b.events.unshift({ 
-                type: b.isSleeping ? 'Eingeschlafen' : 'Aufgewacht', 
-                time: now, 
-                icon: b.isSleeping ? '🌙' : '☀️' 
-            });
+            b.events.unshift({ type: b.isSleeping ? 'Eingeschlafen' : 'Aufgewacht', time: now, icon: b.isSleeping ? '🌙' : '☀️' });
             saveData();
         };
 
-        window.deleteEvent = function(id, index) {
-            if(confirm("Eintrag löschen?")) {
-                data[id].events.splice(index, 1);
+        window.deleteEvent = function(id, time) {
+            if(confirm("Diesen Eintrag endgültig löschen?")) {
+                data[id].events = data[id].events.filter(e => e.time !== time);
                 saveData();
+                if(!document.getElementById('history-modal').classList.contains('hidden')) renderHistory();
             }
         };
+
+        function renderHistory() {
+            const content = document.getElementById('history-content');
+            content.innerHTML = '';
+            
+            const allEvents = [];
+            ['ben', 'leon'].forEach(id => data[id].events.forEach(e => allEvents.push({...e, baby: data[id].name, babyId: id})));
+            allEvents.sort((a,b) => b.time - a.time);
+
+            const months = {};
+            allEvents.forEach(e => {
+                const m = new Date(e.time).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
+                if(!months[m]) months[m] = {};
+                const d = new Date(e.time).toLocaleDateString('de-DE', {weekday:'short', day:'2-digit', month:'2-digit'});
+                if(!months[m][d]) months[m][d] = [];
+                months[m][d].push(e);
+            });
+
+            for(const month in months) {
+                let monthHtml = `<div class="mb-10"><h3 class="text-xl font-black text-gray-800 border-b-4 border-gray-100 pb-2 mb-4">${month}</h3>`;
+                for(const day in months[month]) {
+                    monthHtml += `<div class="mb-4 bg-gray-50 rounded-2xl p-4"><h4 class="font-bold text-gray-400 text-xs uppercase mb-3">${day}</h4>` + 
+                    months[month][day].map(e => `
+                        <div class="flex justify-between items-center text-sm mb-2 pb-2 border-b border-gray-200/50 last:border-0">
+                            <span class="font-medium">${e.baby}: ${e.icon} ${e.type}</span>
+                            <div class="flex gap-4">
+                                <span class="text-gray-400 font-mono">${new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})}</span>
+                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-gray-300">✕</button>
+                            </div>
+                        </div>
+                    `).join('') + `</div>`;
+                }
+                monthHtml += `</div>`;
+                content.innerHTML += monthHtml;
+            }
+        }
 
         function render() {
             const main = document.getElementById('main-content');
             main.innerHTML = '';
             ['ben', 'leon'].forEach(id => {
                 const b = data[id];
-                const feeds = b.events.filter(e => e.type === 'Gefüttert' && new Date(e.time).toDateString() === new Date().toDateString()).length;
+                const today = new Date().toDateString();
+                const feedsToday = b.events.filter(e => e.type === 'Gefüttert' && new Date(e.time).toDateString() === today).length;
                 
                 main.innerHTML += `
-                    <div class="p-5 rounded-3xl mb-4 ${id === 'ben' ? 'bg-blue-50 text-blue-900' : 'bg-orange-50 text-orange-900'}">
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-2xl font-bold">${b.name}</h2>
-                            <span class="text-xl">${b.isSleeping ? '🌙 Schläft' : '☀️ Wach'}</span>
+                    <div class="p-6 rounded-[2.5rem] ${id === 'ben' ? 'bg-blue-50 text-blue-900' : 'bg-orange-50 text-orange-900'} shadow-sm">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-2xl font-black">${b.name}</h2>
+                            <div class="px-4 py-1 rounded-full text-xs font-black uppercase ${b.isSleeping ? 'bg-blue-600 text-white' : 'bg-green-500 text-white'}">
+                                ${b.isSleeping ? 'Schläft' : 'Wach'}
+                            </div>
                         </div>
-                        
-                        <div class="grid grid-cols-2 gap-3 mb-4 text-center text-sm font-semibold">
-                            <div class="bg-white p-3 rounded-2xl shadow-sm">🍼 ${feeds} Mahlzeiten</div>
-                            <div class="bg-white p-3 rounded-2xl shadow-sm">${b.isSleeping ? 'Seit ' + Math.floor((Date.now()-b.sleepStart)/60000) + 'm' : 'Wach'}</div>
+                        <div class="grid grid-cols-2 gap-3 mb-6">
+                            <div class="bg-white/80 backdrop-blur p-4 rounded-3xl text-center shadow-sm">
+                                <span class="block text-xl">🍼</span>
+                                <span class="text-lg font-black">${feedsToday}x</span>
+                                <span class="block text-[10px] uppercase opacity-50">Heute</span>
+                            </div>
+                            <div class="bg-white/80 backdrop-blur p-4 rounded-3xl text-center shadow-sm">
+                                <span class="block text-xl">${b.isSleeping ? '🌙' : '☀️'}</span>
+                                <span class="text-lg font-black">${b.isSleeping ? Math.floor((Date.now()-b.sleepStart)/60000)+'m' : 'Aktiv'}</span>
+                                <span class="block text-[10px] uppercase opacity-50">${b.isSleeping ? 'Dauer' : 'Status'}</span>
+                            </div>
                         </div>
-
-                        <div class="flex gap-2 mb-6">
-                            <button onclick="window.toggleSleep('${id}')" class="flex-1 p-4 rounded-2xl bg-gray-800 text-white font-bold active:scale-95 transition-transform">
-                                ${b.isSleeping ? '☀️ Aufgewacht' : '🌙 Schlafen'}
+                        <div class="flex gap-3 mb-6">
+                            <button onclick="window.toggleSleep('${id}')" class="flex-1 py-5 rounded-3xl bg-gray-900 text-white font-bold text-lg active:scale-95 transition-all shadow-lg">
+                                ${b.isSleeping ? 'Wach' : 'Schlafen'}
                             </button>
-                            <button onclick="window.addFeed('${id}')" class="flex-1 p-4 rounded-2xl bg-white border-2 border-gray-200 font-bold active:scale-95 transition-transform">🍼 Füttern</button>
+                            <button onclick="window.addFeed('${id}')" class="flex-1 py-5 rounded-3xl bg-white border-2 border-gray-200 font-bold text-lg active:scale-95 transition-all shadow-sm">Füttern</button>
                         </div>
-
                         <div class="space-y-2">
-                            <p class="text-xs font-bold uppercase opacity-50 ml-1">Letzte Aktivitäten</p>
-                            ${b.events.slice(0, 4).map((e, idx) => `
-                                <div class="bg-white/60 p-3 rounded-xl flex justify-between items-center text-sm">
-                                    <span>${e.icon} ${e.type}</span>
-                                    <div class="flex items-center gap-3">
-                                        <span class="font-mono">${new Date(e.time).toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}</span>
-                                        <button onclick="window.editTime('${id}', ${idx})" class="text-gray-400">🕒</button>
-                                        <button onclick="window.deleteEvent('${id}', ${idx})" class="text-red-300">✕</button>
-                                    </div>
+                            ${b.events.filter(e => new Date(e.time).toDateString() === today).slice(0, 3).map((e, idx) => `
+                                <div class="bg-white/40 p-3 rounded-2xl flex justify-between text-sm items-center">
+                                    <span class="font-medium">${e.icon} ${e.type}</span>
+                                    <span class="font-mono opacity-50 text-xs">${new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})}</span>
                                 </div>
                             `).join('')}
                         </div>
