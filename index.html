@@ -3,21 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ben & Leon Tracker</title>
+    <title>Ben & Leon</title>
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/180/baby.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Optimiert das Zeit-Feld für das iPhone */
         input[type="time"] {
-            border: none;
-            background: transparent;
-            font-family: monospace;
-            font-size: 1rem;
-            color: #2563eb; /* Blau */
-            font-weight: bold;
-            width: 70px;
-            appearance: none;
-            -webkit-appearance: none;
+            border: none; background: transparent; font-family: monospace;
+            font-size: 1rem; color: #2563eb; font-weight: bold; width: 70px;
+            appearance: none; -webkit-appearance: none;
         }
     </style>
 </head>
@@ -30,18 +27,7 @@
             </div>
             <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase shadow-md">Archiv</button>
         </header>
-
         <main class="p-4 space-y-4" id="main-content"></main>
-        
-        <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto">
-            <div class="max-w-md mx-auto">
-                <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-30">
-                    <h2 class="text-2xl font-bold">Historie</h2>
-                    <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold">X</button>
-                </div>
-                <div id="history-content" class="space-y-6 pb-20"></div>
-            </div>
-        </div>
     </div>
 
     <script type="module">
@@ -72,16 +58,22 @@
                 document.getElementById('sync-status').innerText = '✅ Live';
                 document.getElementById('sync-status').className = 'text-xs text-green-500 font-semibold';
                 render();
-                if(!document.getElementById('history-modal').classList.contains('hidden')) renderHistory();
             } else { saveData(); }
         });
 
         function saveData() { setDoc(docRef, data).catch(e => console.log(e)); }
 
-        window.toggleHistory = function() {
-            const modal = document.getElementById('history-modal');
-            modal.classList.toggle('hidden');
-            if(!modal.classList.contains('hidden')) renderHistory();
+        window.toggleHistory = function() { /* Archiv Logik */ };
+
+        window.updateTime = function(id, originalTime, newTimeStr) {
+            const event = data[id].events.find(e => e.time === originalTime);
+            if (!event || !newTimeStr) return;
+            const [h, m] = newTimeStr.split(':');
+            const d = new Date(event.time);
+            d.setHours(h, m);
+            event.time = d.getTime();
+            data[id].events.sort((a, b) => b.time - a.time);
+            saveData();
         };
 
         window.addFeed = function(id) {
@@ -98,58 +90,6 @@
             saveData();
         };
 
-        // Funktion zum Speichern der Zeit aus dem Input
-        window.updateTime = function(id, originalTime, newTimeStr) {
-            const event = data[id].events.find(e => e.time === originalTime);
-            if (!event || !newTimeStr) return;
-            const [h, m] = newTimeStr.split(':');
-            const d = new Date(event.time);
-            d.setHours(h, m);
-            event.time = d.getTime();
-            data[id].events.sort((a, b) => b.time - a.time);
-            saveData();
-        };
-
-        window.deleteEvent = function(id, time) {
-            if(confirm("Löschen?")) { data[id].events = data[id].events.filter(e => e.time !== time); saveData(); }
-        };
-
-        function renderHistory() {
-            const content = document.getElementById('history-content');
-            content.innerHTML = '';
-            const allEvents = [];
-            ['ben', 'leon'].forEach(id => data[id].events.forEach(e => allEvents.push({...e, babyId: id})));
-            allEvents.sort((a,b) => b.time - a.time);
-
-            const months = {};
-            allEvents.forEach(e => {
-                const m = new Date(e.time).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
-                if(!months[m]) months[m] = {};
-                const d = new Date(e.time).toLocaleDateString('de-DE', {weekday:'short', day:'2-digit'});
-                if(!months[m][d]) months[m][d] = [];
-                months[m][d].push(e);
-            });
-
-            for(const month in months) {
-                let html = `<div class="mb-6"><h3 class="text-lg font-black mb-3 text-gray-800 border-b pb-1">${month}</h3>`;
-                for(const day in months[month]) {
-                    html += `<div class="mb-2 bg-gray-50 p-3 rounded-xl">` + 
-                    months[month][day].map(e => {
-                        const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
-                        return `
-                        <div class="flex justify-between items-center text-sm py-1">
-                            <span>${e.babyId === 'ben' ? 'B' : 'L'}: ${e.icon} ${e.type}</span>
-                            <div class="flex gap-2">
-                                <input type="time" value="${t}" onchange="window.updateTime('${e.babyId}', ${e.time}, this.value)">
-                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-gray-300 ml-2">✕</button>
-                            </div>
-                        </div>`;
-                    }).join('') + `</div>`;
-                }
-                content.innerHTML += html + `</div>`;
-            }
-        }
-
         function render() {
             const main = document.getElementById('main-content');
             main.innerHTML = '';
@@ -157,7 +97,6 @@
                 const b = data[id];
                 const today = new Date().toDateString();
                 const feeds = b.events.filter(e => e.type === 'Gefüttert' && new Date(e.time).toDateString() === today).length;
-                
                 main.innerHTML += `
                     <div class="p-6 rounded-[2.5rem] ${id === 'ben' ? 'bg-blue-50 text-blue-900' : 'bg-orange-50 text-orange-900'} shadow-sm">
                         <div class="flex justify-between items-center mb-6">
@@ -177,8 +116,7 @@
                         <div class="space-y-2">
                             ${b.events.filter(e => new Date(e.time).toDateString() === today).slice(0, 3).map(e => {
                                 const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
-                                return `
-                                <div class="bg-white/40 p-3 rounded-2xl flex justify-between items-center text-sm">
+                                return `<div class="bg-white/40 p-3 rounded-2xl flex justify-between items-center text-sm">
                                     <span>${e.icon} ${e.type}</span>
                                     <div class="bg-white/60 px-2 py-1 rounded-lg border border-blue-100">
                                         <input type="time" value="${t}" onchange="window.updateTime('${id}', ${e.time}, this.value)">
