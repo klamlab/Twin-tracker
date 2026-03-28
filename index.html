@@ -3,13 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ben & Leon Tracker ULTIMATE</title>
+    <title>Ben & Leon Tracker</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Versteckt den Standard-Input-Style, lässt aber das Rädchen erscheinen */
-        input[type="time"]::-webkit-calendar-picker-indicator {
-            display: none;
+        /* Optimiert das Zeit-Feld für das iPhone */
+        input[type="time"] {
+            border: none;
+            background: transparent;
+            font-family: monospace;
+            font-size: 1rem;
+            color: #2563eb; /* Blau */
+            font-weight: bold;
+            width: 70px;
+            appearance: none;
+            -webkit-appearance: none;
         }
     </style>
 </head>
@@ -20,7 +28,7 @@
                 <h1 class="text-2xl font-bold">👶 Ben & Leon</h1>
                 <p id="sync-status" class="text-xs text-orange-500 font-semibold">Verbinde...</p>
             </div>
-            <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase tracking-wide shadow-md">Archiv</button>
+            <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase shadow-md">Archiv</button>
         </header>
 
         <main class="p-4 space-y-4" id="main-content"></main>
@@ -28,15 +36,13 @@
         <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto">
             <div class="max-w-md mx-auto">
                 <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-30">
-                    <h2 class="text-2xl font-bold text-gray-800">Historie</h2>
+                    <h2 class="text-2xl font-bold">Historie</h2>
                     <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold">X</button>
                 </div>
                 <div id="history-content" class="space-y-6 pb-20"></div>
             </div>
         </div>
     </div>
-
-    <input type="time" id="hidden-time-picker" class="fixed opacity-0 pointer-events-none">
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
@@ -70,9 +76,7 @@
             } else { saveData(); }
         });
 
-        function saveData() { 
-            setDoc(docRef, data).catch(e => console.log(e)); 
-        }
+        function saveData() { setDoc(docRef, data).catch(e => console.log(e)); }
 
         window.toggleHistory = function() {
             const modal = document.getElementById('history-modal');
@@ -94,33 +98,20 @@
             saveData();
         };
 
-        // NEU: Der Roll-Picker
-        window.openTimePicker = function(id, eventTime) {
-            const picker = document.getElementById('hidden-time-picker');
-            const event = data[id].events.find(e => e.time === eventTime);
-            const date = new Date(event.time);
-            
-            // Setzt den Picker auf die aktuelle Event-Zeit
-            picker.value = date.getHours().toString().padStart(2, '0') + ":" + date.getMinutes().toString().padStart(2, '0');
-            
-            picker.onchange = function() {
-                const [h, m] = picker.value.split(':');
-                const newDate = new Date(event.time);
-                newDate.setHours(h, m);
-                event.time = newDate.getTime();
-                data[id].events.sort((a, b) => b.time - a.time);
-                saveData();
-            };
-            
-            // Öffnet den nativen iPhone Time-Picker
-            picker.showPicker();
+        // Funktion zum Speichern der Zeit aus dem Input
+        window.updateTime = function(id, originalTime, newTimeStr) {
+            const event = data[id].events.find(e => e.time === originalTime);
+            if (!event || !newTimeStr) return;
+            const [h, m] = newTimeStr.split(':');
+            const d = new Date(event.time);
+            d.setHours(h, m);
+            event.time = d.getTime();
+            data[id].events.sort((a, b) => b.time - a.time);
+            saveData();
         };
 
         window.deleteEvent = function(id, time) {
-            if(confirm("Löschen?")) {
-                data[id].events = data[id].events.filter(e => e.time !== time);
-                saveData();
-            }
+            if(confirm("Löschen?")) { data[id].events = data[id].events.filter(e => e.time !== time); saveData(); }
         };
 
         function renderHistory() {
@@ -140,18 +131,20 @@
             });
 
             for(const month in months) {
-                let html = `<div class="mb-6"><h3 class="text-lg font-black mb-3 text-gray-800">${month}</h3>`;
+                let html = `<div class="mb-6"><h3 class="text-lg font-black mb-3 text-gray-800 border-b pb-1">${month}</h3>`;
                 for(const day in months[month]) {
                     html += `<div class="mb-2 bg-gray-50 p-3 rounded-xl">` + 
-                    months[month][day].map(e => `
+                    months[month][day].map(e => {
+                        const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+                        return `
                         <div class="flex justify-between items-center text-sm py-1">
                             <span>${e.babyId === 'ben' ? 'B' : 'L'}: ${e.icon} ${e.type}</span>
-                            <div class="flex gap-4">
-                                <button onclick="window.openTimePicker('${e.babyId}', ${e.time})" class="font-mono text-blue-500 font-bold">${new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})}</button>
-                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-gray-300">✕</button>
+                            <div class="flex gap-2">
+                                <input type="time" value="${t}" onchange="window.updateTime('${e.babyId}', ${e.time}, this.value)">
+                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-gray-300 ml-2">✕</button>
                             </div>
-                        </div>
-                    `).join('') + `</div>`;
+                        </div>`;
+                    }).join('') + `</div>`;
                 }
                 content.innerHTML += html + `</div>`;
             }
@@ -174,28 +167,24 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-3 mb-6">
-                            <div class="bg-white/80 p-4 rounded-3xl text-center shadow-sm">
-                                <span class="text-lg font-black block">🍼 ${feeds}x</span>
-                                <span class="text-[10px] uppercase opacity-50">Heute</span>
-                            </div>
-                            <div class="bg-white/80 p-4 rounded-3xl text-center shadow-sm">
-                                <span class="text-lg font-black block">${b.isSleeping ? Math.floor((Date.now()-b.sleepStart)/60000)+'m' : 'Aktiv'}</span>
-                                <span class="text-[10px] uppercase opacity-50">Dauer</span>
-                            </div>
+                            <div class="bg-white/80 p-4 rounded-3xl text-center shadow-sm font-black">🍼 ${feeds}x</div>
+                            <div class="bg-white/80 p-4 rounded-3xl text-center shadow-sm font-black italic">${b.isSleeping ? Math.floor((Date.now()-b.sleepStart)/60000)+'m' : 'Aktiv'}</div>
                         </div>
                         <div class="flex gap-3 mb-6">
-                            <button onclick="window.toggleSleep('${id}')" class="flex-1 py-5 rounded-3xl bg-gray-900 text-white font-bold text-lg active:scale-95 shadow-lg">
-                                ${b.isSleeping ? 'Wach' : 'Schlaf'}
-                            </button>
-                            <button onclick="window.addFeed('${id}')" class="flex-1 py-5 rounded-3xl bg-white border-2 border-gray-200 font-bold text-lg active:scale-95 shadow-sm">Füttern</button>
+                            <button onclick="window.toggleSleep('${id}')" class="flex-1 py-5 rounded-3xl bg-gray-900 text-white font-bold active:scale-95 shadow-lg">${b.isSleeping ? 'Wach' : 'Schlaf'}</button>
+                            <button onclick="window.addFeed('${id}')" class="flex-1 py-5 rounded-3xl bg-white border-2 border-gray-200 font-bold active:scale-95 shadow-sm">Füttern</button>
                         </div>
                         <div class="space-y-2">
-                            ${b.events.filter(e => new Date(e.time).toDateString() === today).slice(0, 3).map(e => `
+                            ${b.events.filter(e => new Date(e.time).toDateString() === today).slice(0, 3).map(e => {
+                                const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+                                return `
                                 <div class="bg-white/40 p-3 rounded-2xl flex justify-between items-center text-sm">
                                     <span>${e.icon} ${e.type}</span>
-                                    <button onclick="window.openTimePicker('${id}', ${e.time})" class="font-mono text-blue-600 font-bold underline decoration-blue-200">${new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})}</button>
-                                </div>
-                            `).join('')}
+                                    <div class="bg-white/60 px-2 py-1 rounded-lg border border-blue-100">
+                                        <input type="time" value="${t}" onchange="window.updateTime('${id}', ${e.time}, this.value)">
+                                    </div>
+                                </div>`;
+                            }).join('')}
                         </div>
                     </div>`;
             });
