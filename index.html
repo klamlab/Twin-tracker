@@ -16,12 +16,12 @@
     <div id="app-container" class="max-w-md mx-auto bg-white min-h-screen shadow-lg pb-10">
         <header class="pt-12 pb-4 px-6 bg-white sticky top-0 z-20 border-b border-gray-100 flex justify-between items-end">
             <div><h1 class="text-2xl font-bold">👶 Ben & Leon</h1><p id="sync-status" class="text-xs text-orange-500 font-semibold">Verbinde...</p></div>
-            <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase shadow-md">Archiv</button>
+            <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase shadow-md active:scale-95">Archiv</button>
         </header>
         <main class="p-4 space-y-4" id="main-content"></main>
         <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto">
             <div class="max-w-md mx-auto">
-                <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-30">
+                <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-30 text-gray-900">
                     <h2 class="text-2xl font-bold">Historie</h2>
                     <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold">X</button>
                 </div>
@@ -91,11 +91,12 @@
             const now = Date.now();
             if(!b.isSleeping) {
                 const lastSleep = b.events.find(e => e.type === 'Eingeschlafen');
+                let durationStr = "";
                 if(lastSleep) {
                     const diff = Math.floor((now - lastSleep.time) / 60000);
-                    const h = Math.floor(diff / 60); const m = diff % 60;
-                    b.events.unshift({ type: `Aufgewacht (${h}h ${m}m)`, time: now, icon: '☀️' });
-                } else { b.events.unshift({ type: 'Aufgewacht', time: now, icon: '☀️' }); }
+                    durationStr = ` (${Math.floor(diff/60)}h ${diff%60}m)`;
+                }
+                b.events.unshift({ type: 'Aufgewacht' + durationStr, time: now, icon: '☀️' });
                 b.sleepStart = null;
             } else {
                 b.sleepStart = now;
@@ -114,7 +115,6 @@
             const allEvents = [];
             ['ben', 'leon'].forEach(id => data[id].events.forEach(e => allEvents.push({...e, babyId: id})));
             allEvents.sort((a,b) => b.time - a.time);
-
             const months = {};
             allEvents.forEach(e => {
                 const m = new Date(e.time).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
@@ -123,15 +123,14 @@
                 if(!months[m][d]) months[m][d] = [];
                 months[m][d].push(e);
             });
-
             for(const month in months) {
-                let html = `<div class="mb-6"><h3 class="text-xl font-black mb-3 border-b-2 pb-1">${month}</h3>`;
+                let html = `<div class="mb-6"><h3 class="text-xl font-black mb-3 border-b-2 pb-1 text-gray-800">${month}</h3>`;
                 for(const day in months[month]) {
                     html += `<div class="mb-2 bg-gray-50 p-4 rounded-2xl shadow-sm"><h4 class="text-xs font-bold text-gray-400 mb-2 uppercase">${day}</h4>` + 
                     months[month][day].map(e => {
                         const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
                         return `<div class="flex justify-between items-center text-sm py-2 border-b border-gray-100 last:border-0">
-                            <span>${e.babyId === 'ben' ? 'B' : 'L'}: ${e.icon} ${e.type}</span>
+                            <span class="text-gray-800">${e.babyId === 'ben' ? 'B' : 'L'}: ${e.icon} ${e.type}</span>
                             <div class="flex gap-4 items-center">
                                 <input type="time" value="${t}" onchange="window.updateTime('${e.babyId}', ${e.time}, this.value)">
                                 <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-red-300 font-bold text-lg">✕</button>
@@ -150,17 +149,29 @@
                 const b = data[id];
                 const today = new Date().toDateString();
                 const feedsToday = b.events.filter(e => e.type === 'Gefüttert' && new Date(e.time).toDateString() === today).length;
+                
+                // Letzte Fütterung & Wachzeit berechnen
                 const lastFeed = b.events.find(e => e.type === 'Gefüttert');
-                let diffStr = "---";
-                if(lastFeed) {
-                    const diff = Math.floor((Date.now() - lastFeed.time) / 60000);
-                    diffStr = diff > 60 ? Math.floor(diff/60) + "h " + (diff%60) + "m" : diff + "m";
-                }
+                const lastWake = b.events.find(e => e.type.startsWith('Aufgewacht'));
+                
+                const getDiff = (t) => {
+                    const diff = Math.floor((Date.now() - t) / 60000);
+                    return diff > 60 ? Math.floor(diff/60) + "h " + (diff%60) + "m" : diff + "m";
+                };
+
+                const feedStr = lastFeed ? getDiff(lastFeed.time) : "---";
+                const wakeStr = (!b.isSleeping && lastWake) ? getDiff(lastWake.time) : (b.isSleeping ? "Schläft" : "---");
 
                 main.innerHTML += `
                     <div class="p-6 rounded-[2.5rem] ${id === 'ben' ? 'bg-blue-50 text-blue-900' : 'bg-orange-50 text-orange-900'} shadow-sm">
-                        <div class="flex justify-between items-start mb-6">
-                            <div><h2 class="text-2xl font-black">${b.name}</h2><p class="text-[10px] uppercase font-bold opacity-50">Letzte Mahlzeit: vor ${diffStr}</p></div>
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h2 class="text-2xl font-black">${b.name}</h2>
+                                <div class="text-[10px] uppercase font-bold opacity-60 leading-tight mt-1">
+                                    🍼 Letzte: vor ${feedStr}<br>
+                                    🕒 Wach seit: ${wakeStr}
+                                </div>
+                            </div>
                             <div class="px-4 py-1 rounded-full text-xs font-black uppercase ${b.isSleeping ? 'bg-blue-600 text-white' : 'bg-green-500 text-white'}">${b.isSleeping ? 'Schläft' : 'Wach'}</div>
                         </div>
                         <div class="grid grid-cols-2 gap-3 mb-6 font-black text-center">
