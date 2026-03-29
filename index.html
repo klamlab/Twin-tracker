@@ -19,11 +19,11 @@
             <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase shadow-md active:scale-95">Archiv</button>
         </header>
         <main class="p-4 space-y-4" id="main-content"></main>
-        <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto">
+        <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto text-gray-900">
             <div class="max-w-md mx-auto">
-                <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-30 text-gray-900">
+                <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-30">
                     <h2 class="text-2xl font-bold">Historie</h2>
-                    <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold">X</button>
+                    <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold text-gray-600">X</button>
                 </div>
                 <div id="history-content" class="space-y-6 pb-20"></div>
             </div>
@@ -114,7 +114,10 @@
             content.innerHTML = '';
             const allEvents = [];
             ['ben', 'leon'].forEach(id => data[id].events.forEach(e => allEvents.push({...e, babyId: id})));
+            
+            // Erst nach Zeit sortieren (neueste oben)
             allEvents.sort((a,b) => b.time - a.time);
+
             const months = {};
             allEvents.forEach(e => {
                 const m = new Date(e.time).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
@@ -123,17 +126,27 @@
                 if(!months[m][d]) months[m][d] = [];
                 months[m][d].push(e);
             });
+
             for(const month in months) {
                 let html = `<div class="mb-6"><h3 class="text-xl font-black mb-3 border-b-2 pb-1 text-gray-800">${month}</h3>`;
                 for(const day in months[month]) {
-                    html += `<div class="mb-2 bg-gray-50 p-4 rounded-2xl shadow-sm"><h4 class="text-xs font-bold text-gray-400 mb-2 uppercase">${day}</h4>` + 
-                    months[month][day].map(e => {
+                    html += `<div class="mb-4 bg-gray-50 p-4 rounded-2xl shadow-sm"><h4 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">${day}</h4>`;
+                    
+                    // Hier sortieren wir innerhalb des Tages nach Baby (Ben zuerst, dann Leon)
+                    const dayEvents = months[month][day].sort((a, b) => {
+                        if (a.babyId < b.babyId) return -1;
+                        if (a.babyId > b.babyId) return 1;
+                        return b.time - a.time; // Bei gleichem Baby nach Zeit
+                    });
+
+                    html += dayEvents.map(e => {
                         const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+                        const babyColor = e.babyId === 'ben' ? 'text-blue-600' : 'text-orange-600';
                         return `<div class="flex justify-between items-center text-sm py-2 border-b border-gray-100 last:border-0">
-                            <span class="text-gray-800">${e.babyId === 'ben' ? 'B' : 'L'}: ${e.icon} ${e.type}</span>
+                            <span class="text-gray-800 font-medium"><span class="${babyColor}">${e.babyId === 'ben' ? 'Ben' : 'Leon'}</span>: ${e.icon} ${e.type}</span>
                             <div class="flex gap-4 items-center">
                                 <input type="time" value="${t}" onchange="window.updateTime('${e.babyId}', ${e.time}, this.value)">
-                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-red-300 font-bold text-lg">✕</button>
+                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-red-300 font-bold text-lg px-2">✕</button>
                             </div>
                         </div>`;
                     }).join('') + `</div>`;
@@ -149,8 +162,6 @@
                 const b = data[id];
                 const today = new Date().toDateString();
                 const feedsToday = b.events.filter(e => e.type === 'Gefüttert' && new Date(e.time).toDateString() === today).length;
-                
-                // Letzte Fütterung & Wachzeit berechnen
                 const lastFeed = b.events.find(e => e.type === 'Gefüttert');
                 const lastWake = b.events.find(e => e.type.startsWith('Aufgewacht'));
                 
@@ -174,7 +185,7 @@
                             </div>
                             <div class="px-4 py-1 rounded-full text-xs font-black uppercase ${b.isSleeping ? 'bg-blue-600 text-white' : 'bg-green-500 text-white'}">${b.isSleeping ? 'Schläft' : 'Wach'}</div>
                         </div>
-                        <div class="grid grid-cols-2 gap-3 mb-6 font-black text-center">
+                        <div class="grid grid-cols-2 gap-3 mb-6 font-black text-center text-gray-900">
                             <div class="bg-white/80 p-4 rounded-3xl shadow-sm">🍼 ${feedsToday}x</div>
                             <div class="bg-white/80 p-4 rounded-3xl shadow-sm italic">${b.isSleeping ? Math.floor((Date.now()-b.sleepStart)/60000)+'m' : 'Aktiv'}</div>
                         </div>
@@ -183,7 +194,7 @@
                             ${b.events.filter(e => new Date(e.time).toDateString() === today).slice(0, 3).map(e => {
                                 const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
                                 return `<div class="bg-white/40 p-3 rounded-2xl flex justify-between items-center text-sm">
-                                    <span>${e.icon} ${e.type}</span>
+                                    <span class="text-gray-800 font-medium">${e.icon} ${e.type}</span>
                                     <div class="flex items-center gap-3"><div class="bg-white/60 px-2 py-1 rounded-lg border border-blue-100"><input type="time" value="${t}" onchange="window.updateTime('${id}', ${e.time}, this.value)"></div><button onclick="window.deleteEvent('${id}', ${e.time})" class="text-red-300 font-bold px-1">✕</button></div>
                                 </div>`;
                             }).join('')}
