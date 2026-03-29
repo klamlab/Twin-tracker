@@ -4,37 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Ben & Leon</title>
-    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/180/baby.png">
-
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        input[type="time"] {
-            border: none; background: transparent; font-family: monospace;
-            font-size: 1rem; color: #2563eb; font-weight: bold; width: 70px;
-            appearance: none; -webkit-appearance: none;
-        }
+        input[type="time"] { border: none; background: transparent; font-family: monospace; font-size: 1rem; color: #2563eb; font-weight: bold; width: 70px; appearance: none; -webkit-appearance: none; }
     </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-900 antialiased">
     <div id="app-container" class="max-w-md mx-auto bg-white min-h-screen shadow-lg pb-10">
         <header class="pt-12 pb-4 px-6 bg-white sticky top-0 z-20 border-b border-gray-100 flex justify-between items-end">
-            <div>
-                <h1 class="text-2xl font-bold">👶 Ben & Leon</h1>
-                <p id="sync-status" class="text-xs text-orange-500 font-semibold">Verbinde...</p>
-            </div>
-            <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase shadow-md active:scale-95">Archiv</button>
+            <div><h1 class="text-2xl font-bold">👶 Ben & Leon</h1><p id="sync-status" class="text-xs text-orange-500 font-semibold">Verbinde...</p></div>
+            <button onclick="window.toggleHistory()" class="text-xs bg-gray-800 text-white px-4 py-2 rounded-full font-bold uppercase shadow-md">Archiv</button>
         </header>
-
         <main class="p-4 space-y-4" id="main-content"></main>
-        
-        <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto text-gray-900">
+        <div id="history-modal" class="hidden fixed inset-0 bg-white z-50 p-4 overflow-y-auto">
             <div class="max-w-md mx-auto">
                 <div class="flex justify-between items-center mb-6 sticky top-0 bg-white py-2 z-30">
-                    <h2 class="text-2xl font-bold">Komplette Historie</h2>
-                    <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold">Schließen</button>
+                    <h2 class="text-2xl font-bold">Historie</h2>
+                    <button onclick="window.toggleHistory()" class="bg-gray-100 p-2 rounded-full px-4 font-bold">X</button>
                 </div>
                 <div id="history-content" class="space-y-6 pb-20"></div>
             </div>
@@ -59,8 +48,8 @@
         const docRef = doc(db, "tracker", "twinsData");
 
         let data = {
-            ben: { name: 'Ben', isSleeping: false, sleepStart: null, events: [], color: 'blue' },
-            leon: { name: 'Leon', isSleeping: false, sleepStart: null, events: [], color: 'orange' }
+            ben: { name: 'Ben', isSleeping: false, sleepStart: null, events: [] },
+            leon: { name: 'Leon', isSleeping: false, sleepStart: null, events: [] }
         };
 
         onSnapshot(docRef, (docSnap) => {
@@ -73,9 +62,7 @@
             } else { saveData(); }
         });
 
-        function saveData() { 
-            setDoc(docRef, data).catch(e => console.error("Error saving:", e)); 
-        }
+        function saveData() { setDoc(docRef, data).catch(e => console.error(e)); }
 
         window.toggleHistory = function() {
             const modal = document.getElementById('history-modal');
@@ -87,8 +74,7 @@
             const event = data[id].events.find(e => e.time === originalTime);
             if (!event || !newTimeStr) return;
             const [h, m] = newTimeStr.split(':');
-            const d = new Date(event.time);
-            d.setHours(parseInt(h), parseInt(m));
+            const d = new Date(event.time); d.setHours(parseInt(h), parseInt(m));
             event.time = d.getTime();
             data[id].events.sort((a, b) => b.time - a.time);
             saveData();
@@ -103,16 +89,23 @@
             const b = data[id];
             b.isSleeping = !b.isSleeping;
             const now = Date.now();
-            b.sleepStart = b.isSleeping ? now : null;
-            b.events.unshift({ type: b.isSleeping ? 'Eingeschlafen' : 'Aufgewacht', time: now, icon: b.isSleeping ? '🌙' : '☀️' });
+            if(!b.isSleeping) {
+                const lastSleep = b.events.find(e => e.type === 'Eingeschlafen');
+                if(lastSleep) {
+                    const diff = Math.floor((now - lastSleep.time) / 60000);
+                    const h = Math.floor(diff / 60); const m = diff % 60;
+                    b.events.unshift({ type: `Aufgewacht (${h}h ${m}m)`, time: now, icon: '☀️' });
+                } else { b.events.unshift({ type: 'Aufgewacht', time: now, icon: '☀️' }); }
+                b.sleepStart = null;
+            } else {
+                b.sleepStart = now;
+                b.events.unshift({ type: 'Eingeschlafen', time: now, icon: '🌙' });
+            }
             saveData();
         };
 
         window.deleteEvent = function(id, time) {
-            if(confirm("Diesen Eintrag wirklich löschen?")) {
-                data[id].events = data[id].events.filter(e => e.time !== time);
-                saveData();
-            }
+            if(confirm("Löschen?")) { data[id].events = data[id].events.filter(e => e.time !== time); saveData(); }
         };
 
         function renderHistory() {
@@ -126,7 +119,7 @@
             allEvents.forEach(e => {
                 const m = new Date(e.time).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
                 if(!months[m]) months[m] = {};
-                const d = new Date(e.time).toLocaleDateString('de-DE', {weekday:'short', day:'2-digit'});
+                const d = new Date(e.time).toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'2-digit'});
                 if(!months[m][d]) months[m][d] = [];
                 months[m][d].push(e);
             });
@@ -134,14 +127,14 @@
             for(const month in months) {
                 let html = `<div class="mb-6"><h3 class="text-xl font-black mb-3 border-b-2 pb-1">${month}</h3>`;
                 for(const day in months[month]) {
-                    html += `<div class="mb-2 bg-gray-50 p-4 rounded-2xl shadow-sm">` + 
+                    html += `<div class="mb-2 bg-gray-50 p-4 rounded-2xl shadow-sm"><h4 class="text-xs font-bold text-gray-400 mb-2 uppercase">${day}</h4>` + 
                     months[month][day].map(e => {
                         const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
                         return `<div class="flex justify-between items-center text-sm py-2 border-b border-gray-100 last:border-0">
-                            <span class="font-medium">${e.babyId === 'ben' ? 'B' : 'L'}: ${e.icon} ${e.type}</span>
+                            <span>${e.babyId === 'ben' ? 'B' : 'L'}: ${e.icon} ${e.type}</span>
                             <div class="flex gap-4 items-center">
                                 <input type="time" value="${t}" onchange="window.updateTime('${e.babyId}', ${e.time}, this.value)">
-                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-red-300 px-2 font-bold text-lg">✕</button>
+                                <button onclick="window.deleteEvent('${e.babyId}', ${e.time})" class="text-red-300 font-bold text-lg">✕</button>
                             </div>
                         </div>`;
                     }).join('') + `</div>`;
@@ -156,34 +149,31 @@
             ['ben', 'leon'].forEach(id => {
                 const b = data[id];
                 const today = new Date().toDateString();
-                const feeds = b.events.filter(e => e.type === 'Gefüttert' && new Date(e.time).toDateString() === today).length;
+                const feedsToday = b.events.filter(e => e.type === 'Gefüttert' && new Date(e.time).toDateString() === today).length;
+                const lastFeed = b.events.find(e => e.type === 'Gefüttert');
+                let diffStr = "---";
+                if(lastFeed) {
+                    const diff = Math.floor((Date.now() - lastFeed.time) / 60000);
+                    diffStr = diff > 60 ? Math.floor(diff/60) + "h " + (diff%60) + "m" : diff + "m";
+                }
+
                 main.innerHTML += `
                     <div class="p-6 rounded-[2.5rem] ${id === 'ben' ? 'bg-blue-50 text-blue-900' : 'bg-orange-50 text-orange-900'} shadow-sm">
-                        <div class="flex justify-between items-center mb-6">
-                            <h2 class="text-2xl font-black">${b.name}</h2>
-                            <div class="px-4 py-1 rounded-full text-xs font-black uppercase ${b.isSleeping ? 'bg-blue-600 text-white' : 'bg-green-500 text-white'}">
-                                ${b.isSleeping ? 'Schläft' : 'Wach'}
-                            </div>
+                        <div class="flex justify-between items-start mb-6">
+                            <div><h2 class="text-2xl font-black">${b.name}</h2><p class="text-[10px] uppercase font-bold opacity-50">Letzte Mahlzeit: vor ${diffStr}</p></div>
+                            <div class="px-4 py-1 rounded-full text-xs font-black uppercase ${b.isSleeping ? 'bg-blue-600 text-white' : 'bg-green-500 text-white'}">${b.isSleeping ? 'Schläft' : 'Wach'}</div>
                         </div>
-                        <div class="grid grid-cols-2 gap-3 mb-6 font-black">
-                            <div class="bg-white/80 p-4 rounded-3xl text-center shadow-sm">🍼 ${feeds}x</div>
-                            <div class="bg-white/80 p-4 rounded-3xl text-center shadow-sm italic">${b.isSleeping ? Math.floor((Date.now()-b.sleepStart)/60000)+'m' : 'Aktiv'}</div>
+                        <div class="grid grid-cols-2 gap-3 mb-6 font-black text-center">
+                            <div class="bg-white/80 p-4 rounded-3xl shadow-sm">🍼 ${feedsToday}x</div>
+                            <div class="bg-white/80 p-4 rounded-3xl shadow-sm italic">${b.isSleeping ? Math.floor((Date.now()-b.sleepStart)/60000)+'m' : 'Aktiv'}</div>
                         </div>
-                        <div class="flex gap-3 mb-6">
-                            <button onclick="window.toggleSleep('${id}')" class="flex-1 py-5 rounded-3xl bg-gray-900 text-white font-bold active:scale-95 shadow-lg">${b.isSleeping ? 'Wach' : 'Schlaf'}</button>
-                            <button onclick="window.addFeed('${id}')" class="flex-1 py-5 rounded-3xl bg-white border-2 border-gray-200 font-bold active:scale-95 shadow-sm">Füttern</button>
-                        </div>
+                        <div class="flex gap-3 mb-6"><button onclick="window.toggleSleep('${id}')" class="flex-1 py-5 rounded-3xl bg-gray-900 text-white font-bold active:scale-95 shadow-lg">${b.isSleeping ? 'Wach' : 'Schlaf'}</button><button onclick="window.addFeed('${id}')" class="flex-1 py-5 rounded-3xl bg-white border-2 border-gray-200 font-bold active:scale-95 shadow-sm">Füttern</button></div>
                         <div class="space-y-2">
                             ${b.events.filter(e => new Date(e.time).toDateString() === today).slice(0, 3).map(e => {
                                 const t = new Date(e.time).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
                                 return `<div class="bg-white/40 p-3 rounded-2xl flex justify-between items-center text-sm">
                                     <span>${e.icon} ${e.type}</span>
-                                    <div class="flex items-center gap-3">
-                                        <div class="bg-white/60 px-2 py-1 rounded-lg border border-blue-100">
-                                            <input type="time" value="${t}" onchange="window.updateTime('${id}', ${e.time}, this.value)">
-                                        </div>
-                                        <button onclick="window.deleteEvent('${id}', ${e.time})" class="text-red-300 font-bold px-1">✕</button>
-                                    </div>
+                                    <div class="flex items-center gap-3"><div class="bg-white/60 px-2 py-1 rounded-lg border border-blue-100"><input type="time" value="${t}" onchange="window.updateTime('${id}', ${e.time}, this.value)"></div><button onclick="window.deleteEvent('${id}', ${e.time})" class="text-red-300 font-bold px-1">✕</button></div>
                                 </div>`;
                             }).join('')}
                         </div>
